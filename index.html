@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kayak Check" />
+  <title>🚣 Kayak Conditions — South Puget Sound</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(160deg, #0b1929 0%, #0d2137 50%, #091520 100%);
+      font-family: 'DM Mono', monospace;
+      color: white;
+      overflow-x: hidden;
+    }
+
+    #bg-glow {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(14,80,140,0.15) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(6,50,90,0.2) 0%, transparent 50%);
+    }
+
+    #wave-svg {
+      position: fixed; bottom: 0; left: 0; width: 100%; opacity: 0.06; z-index: 0;
+    }
+
+    #app {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* HEADER */
+    .header-sub {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+    }
+    .header-sub span {
+      font-size: 11px; letter-spacing: 3px; color: rgba(255,255,255,0.4); text-transform: uppercase;
+    }
+    .header-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px; line-height: 1.15; letter-spacing: -0.5px;
+    }
+    .header-stamp {
+      color: rgba(255,255,255,0.3); font-size: 11px; margin-top: 6px;
+    }
+
+    /* VERDICT CARD */
+    #verdict-card {
+      border-radius: 20px; padding: 24px;
+      display: flex; align-items: center; gap: 24px;
+      margin: 24px 0 18px;
+      background: rgba(255,255,255,0.04);
+      transition: border-color 0.5s, box-shadow 0.5s;
+    }
+    #verdict-label {
+      font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.35); margin-bottom: 6px;
+    }
+    #verdict-text {
+      font-family: 'DM Serif Display', serif; font-size: 30px; line-height: 1;
+      transition: color 0.5s;
+    }
+    #verdict-sub {
+      font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 8px;
+    }
+
+    /* SCORE RING */
+    #score-ring { flex-shrink: 0; }
+    #ring-track { transition: stroke 0.5s; }
+    #ring-fill { transition: stroke-dasharray 1s ease, stroke 0.5s ease; }
+    #ring-score { transition: fill 0.5s; }
+
+    /* ALERTS */
+    #alerts-banner {
+      background: rgba(251,191,36,0.1);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; display: none;
+    }
+    .alert-title {
+      color: #fbbf24; font-size: 11px; letter-spacing: 2px; margin-bottom: 8px;
+    }
+    .alert-item {
+      color: rgba(255,255,255,0.75); font-size: 13px; margin-bottom: 6px; line-height: 1.5;
+    }
+    .alert-item strong { color: #fbbf24; }
+
+    /* CARDS GRID */
+    #cards {
+      display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+    }
+
+    .card {
+      border-radius: 12px; padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 4px;
+      flex: 1 1 140px; min-width: 130px;
+      transition: background 0.4s, border-color 0.4s;
+    }
+    .card-top {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .card-label {
+      font-size: 11px; letter-spacing: 1.5px;
+      color: rgba(255,255,255,0.5); text-transform: uppercase;
+    }
+    .card-badge {
+      font-size: 10px; border-radius: 4px; padding: 2px 6px; letter-spacing: 1px;
+      transition: background 0.4s, color 0.4s;
+    }
+    .card-value {
+      font-family: 'DM Serif Display', serif; font-size: 22px; line-height: 1.1;
+    }
+    .card-unit { font-size: 13px; color: rgba(255,255,255,0.4); margin-left: 3px; }
+    .card-limit { color: rgba(255,255,255,0.3); font-size: 11px; }
+    .card-err { font-size: 13px; color: rgba(255,255,255,0.3); }
+
+    .card-pass  { background: rgba(74,222,128,0.08);  border: 1px solid rgba(74,222,128,0.25); }
+    .card-fail  { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); }
+    .card-nodata{ background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+    .badge-pass  { background: rgba(74,222,128,0.2);  color: #4ade80; }
+    .badge-fail  { background: rgba(248,113,113,0.2); color: #f87171; }
+    .badge-nodata{ background: rgba(148,163,184,0.15); color: rgba(148,163,184,0.7); }
+
+    /* NEXT TIDE */
+    #next-tide {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;
+      display: none; justify-content: space-between; align-items: center;
+    }
+    #next-tide-label {
+      font-size: 11px; letter-spacing: 1.5px; color: rgba(255,255,255,0.35); margin-bottom: 3px;
+    }
+    #next-tide-height {
+      font-family: 'DM Serif Display', serif; font-size: 20px;
+    }
+    #next-tide-time {
+      color: rgba(255,255,255,0.4); font-size: 13px; text-align: right;
+    }
+
+    /* CONTROLS */
+    #controls { display: flex; gap: 10px; margin-bottom: 20px; }
+
+    button {
+      flex: 1; border-radius: 10px; padding: 13px 10px; cursor: pointer;
+      font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1.5px;
+      border: none; transition: opacity 0.2s, background 0.3s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button:active:not(:disabled) { opacity: 0.7; }
+
+    #btn-refresh {
+      background: rgba(56,189,248,0.12);
+      border: 1px solid rgba(56,189,248,0.3) !important;
+      color: #38bdf8;
+    }
+    #btn-thresh {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      color: rgba(255,255,255,0.5);
+    }
+    #btn-thresh.active {
+      background: rgba(251,191,36,0.12);
+      border-color: rgba(251,191,36,0.35) !important;
+      color: #fbbf24;
+    }
+
+    /* THRESHOLD PANEL */
+    #thresh-panel {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(251,191,36,0.2);
+      border-radius: 16px; padding: 20px; margin-bottom: 20px; display: none;
+    }
+    .thresh-title {
+      font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.35); margin-bottom: 16px;
+    }
+    .thresh-row { margin-bottom: 16px; }
+    .thresh-row-top {
+      display: flex; justify-content: space-between; margin-bottom: 6px;
+    }
+    .thresh-name { color: rgba(255,255,255,0.55); font-size: 12px; }
+    .thresh-val  { color: #fbbf24; font-size: 12px; }
+    input[type=range] { width: 100%; accent-color: #fbbf24; cursor: pointer; }
+    #btn-save {
+      width: 100%; background: rgba(251,191,36,0.15);
+      border: 1px solid rgba(251,191,36,0.4) !important;
+      color: #fbbf24; border-radius: 8px; padding: 11px; margin-top: 4px;
+    }
+
+    /* FOOTER */
+    #footer {
+      font-size: 11px; color: rgba(255,255,255,0.2);
+      line-height: 1.8; text-align: center; margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="bg-glow"></div>
+  <svg id="wave-svg" viewBox="0 0 1440 120" preserveAspectRatio="none">
+    <path d="M0,60 C240,100 480,20 720,60 C960,100 1200,20 1440,60 L1440,120 L0,120 Z" fill="#4ade80"/>
+    <path d="M0,80 C360,40 720,100 1080,60 C1260,40 1380,80 1440,70 L1440,120 L0,120 Z" fill="#38bdf8"/>
+  </svg>
+
+  <div id="app">
+
+    <!-- Header -->
+    <div>
+      <div class="header-sub">
+        <span style="font-size:22px">🚣</span>
+        <span>South Puget Sound</span>
+      </div>
+      <div class="header-title">Kayak Conditions</div>
+      <div class="header-stamp" id="stamp"></div>
+    </div>
+
+    <!-- Verdict card -->
+    <div id="verdict-card">
+      <svg id="score-ring" width="130" height="130" viewBox="0 0 140 140">
+        <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10"/>
+        <circle id="ring-fill" cx="70" cy="70" r="54" fill="none"
+          stroke="#f87171" stroke-width="10" stroke-dasharray="0 339.3"
+          stroke-linecap="round" transform="rotate(-90 70 70)"/>
+        <text id="ring-score" x="70" y="65" text-anchor="middle"
+          fill="#f87171" font-size="28" font-family="'DM Serif Display',serif" font-weight="bold">0</text>
+        <text x="70" y="84" text-anchor="middle"
+          fill="rgba(255,255,255,0.45)" font-size="11" font-family="'DM Mono',monospace" letter-spacing="2">SCORE</text>
+      </svg>
+      <div>
+        <div id="verdict-label">CONDITIONS</div>
+        <div id="verdict-text" style="color:#f87171">LOADING…</div>
+        <div id="verdict-sub">Fetching data…</div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="alerts-banner">
+      <div class="alert-title">⚠ ACTIVE ALERTS</div>
+      <div id="alerts-list"></div>
+    </div>
+
+    <!-- Cards -->
+    <div id="cards">
+      <div class="card card-nodata" id="card-tide">
+        <div class="card-top">
+          <span class="card-label">Tide Level*</span>
+          <span class="card-badge badge-nodata" id="badge-tide">LOADING</span>
+        </div>
+        <div class="card-value" id="val-tide"><span class="card-err">—</span></div>
+        <div class="card-limit" id="limit-tide"></div>
+      </div>
+      <div class="card card-nodata" id="card-wind">
+        <div class="card-top">
+          <span class="card-label">Wind Speed</span>
+          <span class="card-badge badge-nodata" id="badge-wind">LOADING</span>
+        </div>
+        <div class="card-value" id="val-wind"><span class="card-err">—</span></div>
+        <div class="card-limit" id="limit-wind"></div>
+      </div>
+      <div class="card card-nodata" id="card-precip">
+        <div class="card-top">
+          <span class="card-label">Precip</span>
+          <span class="card-badge badge-nodata" id="badge-precip">LOADING</span>
+        </div>
+        <div class="card-value" id="val-precip"><span class="card-err">—</span></div>
+        <div class="card-limit" id="limit-precip"></div>
+      </div>
+      <div class="card card-nodata" id="card-alerts">
+        <div class="card-top">
+          <span class="card-label">Marine Alerts</span>
+          <span class="card-badge badge-nodata" id="badge-alerts">LOADING</span>
+        </div>
+        <div class="card-value" id="val-alerts"><span class="card-err">—</span></div>
+        <div class="card-limit" id="limit-alerts"></div>
+      </div>
+    </div>
+
+    <!-- Next tide -->
+    <div id="next-tide">
+      <div>
+        <div id="next-tide-label">NEXT TIDE</div>
+        <div id="next-tide-height" class="card-value">—</div>
+      </div>
+      <div id="next-tide-time"></div>
+    </div>
+
+    <!-- Buttons -->
+    <div id="controls">
+      <button id="btn-refresh" onclick="fetchAll()">↻ REFRESH</button>
+      <button id="btn-thresh" onclick="toggleThresh()">⚙ THRESHOLDS</button>
+    </div>
+
+    <!-- Threshold panel -->
+    <div id="thresh-panel">
+      <div class="thresh-title">SET YOUR THRESHOLDS</div>
+
+      <div class="thresh-row">
+        <div class="thresh-row-top">
+          <span class="thresh-name">Min Tide Level*</span>
+          <span class="thresh-val" id="disp-tide">5.0 ft</span>
+        </div>
+        <input type="range" id="sl-tide" min="0" max="20" step="0.5" value="5.0"
+          oninput="document.getElementById('disp-tide').textContent=parseFloat(this.value).toFixed(1)+' ft'" />
+      </div>
+
+      <div class="thresh-row">
+        <div class="thresh-row-top">
+          <span class="thresh-name">Max Wind Speed</span>
+          <span class="thresh-val" id="disp-wind">5 kn</span>
+        </div>
+        <input type="range" id="sl-wind" min="0" max="30" step="1" value="5"
+          oninput="document.getElementById('disp-wind').textContent=this.value+' kn'" />
+      </div>
+
+      <div class="thresh-row">
+        <div class="thresh-row-top">
+          <span class="thresh-name">Max Precip</span>
+          <span class="thresh-val" id="disp-precip">0.10 in/hr</span>
+        </div>
+        <input type="range" id="sl-precip" min="0" max="1" step="0.05" value="0.1"
+          oninput="document.getElementById('disp-precip').textContent=parseFloat(this.value).toFixed(2)+' in/hr'" />
+      </div>
+
+      <button id="btn-save" onclick="saveThresh()">SAVE THRESHOLDS</button>
+    </div>
+
+    <div id="footer">
+      Data: NOAA Tides &amp; Currents (Budd Inlet · 9446969) · Open-Meteo · NWS Alerts<br>
+      * Tide level is interpolated from NOAA predictions · Always verify before launching.
+    </div>
+  </div>
+
+  <script>
+    const NOAA_STATION = "9446969";
+    const LAT = 47.0477, LON = -122.9007;
+    const CIRC = 2 * Math.PI * 54; // SVG ring circumference
+
+    let params = { minTide: 5.0, maxWind: 5, maxPrecip: 0.10 };
+    let state  = { tide: null, wind: null, precip: null, alertCount: 0,
+                   tideErr: null, windErr: null, alertErr: null, loading: false };
+
+    function dateStr(offsetDays = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    /* ── DOM helpers ─────────────────────────────────────────── */
+    function setCard(id, value, unit, ok, err, threshold, direction) {
+      const card   = document.getElementById('card-'+id);
+      const badge  = document.getElementById('badge-'+id);
+      const val    = document.getElementById('val-'+id);
+      const limit  = document.getElementById('limit-'+id);
+
+      card.className = 'card ' + (err ? 'card-nodata' : ok ? 'card-pass' : 'card-fail');
+      badge.className = 'card-badge ' + (err ? 'badge-nodata' : ok ? 'badge-pass' : 'badge-fail');
+      badge.textContent = err ? 'NO DATA' : ok ? '✓ PASS' : '✗ FAIL';
+
+      if (err) {
+        val.innerHTML = `<span class="card-err">${err}</span>`;
+        limit.textContent = '';
+      } else {
+        val.innerHTML = value !== null
+          ? `${value}<span class="card-unit">${unit}</span>`
+          : '—';
+        limit.textContent = `limit: ${direction === 'above' ? '≥' : '≤'}${threshold}${unit}`;
+      }
+    }
+
+    function setVerdict(score, passCount, total, loading) {
+      const color = score >= 75 ? '#4ade80' : score >= 45 ? '#fbbf24' : '#f87171';
+      const verdict = loading ? 'CHECKING…'
+        : total === 0   ? 'NO DATA'
+        : score === 100 ? 'GO PADDLE'
+        : score >= 75   ? 'USE CAUTION'
+        : 'STAY ASHORE';
+
+      document.getElementById('verdict-text').textContent = verdict;
+      document.getElementById('verdict-text').style.color = color;
+      document.getElementById('verdict-sub').textContent =
+        total > 0 ? `${passCount}/4 conditions met` : 'Fetching data…';
+
+      const card = document.getElementById('verdict-card');
+      card.style.border = `1px solid ${color}33`;
+      card.style.boxShadow = `0 0 40px ${color}11`;
+
+      // Score ring
+      const dash = (score / 100) * CIRC;
+      const fill = document.getElementById('ring-fill');
+      fill.setAttribute('stroke-dasharray', `${dash} ${CIRC}`);
+      fill.setAttribute('stroke', color);
+      const scoreEl = document.getElementById('ring-score');
+      scoreEl.textContent = score;
+      scoreEl.setAttribute('fill', color);
+    }
+
+    /* ── Fetch ───────────────────────────────────────────────── */
+    async function fetchAll() {
+      if (state.loading) return;
+      state.loading = true;
+      const btn = document.getElementById('btn-refresh');
+      btn.disabled = true;
+      btn.textContent = 'FETCHING…';
+      setVerdict(0, 0, 0, true);
+
+      // 1. NOAA Tide — hi/lo predictions, interpolate current level between nearest two
+      try {
+        const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter`
+          + `?begin_date=${dateStr(-1)}&end_date=${dateStr(1)}`
+          + `&station=${NOAA_STATION}&product=predictions`
+          + `&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&application=web_services&format=json`;
+        const res  = await fetch(url);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message);
+        if (!json.predictions || !json.predictions.length) throw new Error('No prediction data');
+        // Linearly interpolate between the surrounding hi/lo to get current level
+        const now = Date.now();
+        const pts = json.predictions.map(p => ({ t: new Date(p.t).getTime(), v: parseFloat(p.v) }));
+        let before = null, after = null;
+        for (const p of pts) {
+          if (p.t <= now) before = p;
+          else if (!after) after = p;
+        }
+        let tideVal;
+        if (before && after) {
+          const frac = (now - before.t) / (after.t - before.t);
+          tideVal = before.v + frac * (after.v - before.v);
+        } else {
+          tideVal = (before || after).v;
+        }
+        state.tide    = tideVal;
+        state.tideErr = null;
+      } catch(e) {
+        state.tide    = null;
+        state.tideErr = e.message || 'fetch failed';
+      }
+
+      // 2. NOAA Tide Predictions (next hi/lo)
+      try {
+        const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter`
+          + `?begin_date=${dateStr(0)}&end_date=${dateStr(1)}`
+          + `&station=${NOAA_STATION}&product=predictions`
+          + `&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&application=web_services&format=json`;
+        const res  = await fetch(url);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message);
+        const now  = new Date();
+        const next = (json.predictions || []).find(p => new Date(p.t) > now);
+        if (next) {
+          const nt = document.getElementById('next-tide');
+          nt.style.display = 'flex';
+          document.getElementById('next-tide-label').textContent =
+            'NEXT ' + (next.type === 'H' ? 'HIGH' : 'LOW') + ' TIDE';
+          document.getElementById('next-tide-height').innerHTML =
+            parseFloat(next.v).toFixed(1) + '<span class="card-unit"> ft</span>';
+          document.getElementById('next-tide-time').textContent = next.t;
+        }
+      } catch(_) {}
+
+      // 3. Open-Meteo wind + precip
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast`
+          + `?latitude=${LAT}&longitude=${LON}`
+          + `&current=wind_speed_10m,precipitation`
+          + `&wind_speed_unit=kn&timezone=America%2FLos_Angeles&forecast_days=1`;
+        const res  = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json.current) throw new Error('No current block');
+        state.wind    = parseFloat(json.current.wind_speed_10m);
+        state.precip  = parseFloat(json.current.precipitation);
+        state.windErr = null;
+      } catch(e) {
+        state.wind    = null;
+        state.precip  = null;
+        state.windErr = e.message || 'fetch failed';
+      }
+
+      // 4. NWS Alerts — WAZ516 (weather) + PZZ132 (marine)
+      try {
+        const [r1, r2] = await Promise.allSettled([
+          fetch('https://api.weather.gov/alerts/active?zone=WAZ516&status=actual'),
+          fetch('https://api.weather.gov/alerts/active?zone=PZZ132&status=actual'),
+        ]);
+        const all = [];
+        for (const r of [r1, r2]) {
+          if (r.status === 'fulfilled' && r.value.ok) {
+            const j = await r.value.json();
+            all.push(...(j.features || []));
+          }
+        }
+        // deduplicate
+        const seen = new Set();
+        const deduped = all.filter(a => {
+          const id = a.id || a.properties?.id;
+          if (seen.has(id)) return false;
+          seen.add(id); return true;
+        });
+        state.alertCount = deduped.length;
+        state.alertErr   = null;
+
+        // Render alert banner
+        const banner = document.getElementById('alerts-banner');
+        const list   = document.getElementById('alerts-list');
+        if (deduped.length > 0) {
+          banner.style.display = 'block';
+          list.innerHTML = deduped.map(a =>
+            `<div class="alert-item"><strong>${a.properties?.event || 'Alert'}</strong>`
+            + (a.properties?.headline ? ` — ${a.properties.headline}` : '')
+            + `</div>`
+          ).join('');
+        } else {
+          banner.style.display = 'none';
+          list.innerHTML = '';
+        }
+      } catch(e) {
+        state.alertCount = 0;
+        state.alertErr   = e.message || 'fetch failed';
+      }
+
+      // ── Evaluate & render ───────────────────────────────────
+      const tideOk   = !state.tideErr  && state.tide   !== null && state.tide   >= params.minTide;
+      const windOk   = !state.windErr  && state.wind   !== null && state.wind   <= params.maxWind;
+      const precipOk = !state.windErr  && state.precip !== null && state.precip <= params.maxPrecip;
+      const alertOk  = !state.alertErr && state.alertCount === 0;
+
+      setCard('tide',   state.tide   !== null ? state.tide.toFixed(1)   : null, ' ft',
+        tideOk,   state.tideErr,  params.minTide,  'above');
+      setCard('wind',   state.wind   !== null ? state.wind.toFixed(1)   : null, ' kn',
+        windOk,   state.windErr,  params.maxWind,  'below');
+      setCard('precip', state.precip !== null ? state.precip.toFixed(2) : null, ' in/hr',
+        precipOk, state.windErr,  params.maxPrecip,'below');
+      setCard('alerts',
+        state.alertErr ? null : (state.alertCount === 0 ? 'None' : `${state.alertCount} active`),
+        '', alertOk, state.alertErr, 0, 'below');
+
+      const checks    = [tideOk, windOk, precipOk, alertOk];
+      const nullChecks = [state.tideErr, state.windErr, state.windErr, state.alertErr];
+      const passCount = checks.filter((v,i) => v && !nullChecks[i]).length;
+      const total     = nullChecks.filter(e => !e).length;
+      const score     = Math.round((passCount / 4) * 100);
+      setVerdict(score, passCount, total, false);
+
+      document.getElementById('stamp').textContent =
+        `Updated ${new Date().toLocaleTimeString()} · Budd Inlet gauge (NOAA ${NOAA_STATION})`;
+
+      state.loading = false;
+      btn.disabled  = false;
+      btn.textContent = '↻ REFRESH';
+    }
+
+    /* ── Threshold panel ─────────────────────────────────────── */
+    let threshOpen = false;
+    function toggleThresh() {
+      threshOpen = !threshOpen;
+      const panel = document.getElementById('thresh-panel');
+      const btn   = document.getElementById('btn-thresh');
+      panel.style.display = threshOpen ? 'block' : 'none';
+      btn.className = threshOpen ? 'active' : '';
+    }
+
+    function saveThresh() {
+      params.minTide  = parseFloat(document.getElementById('sl-tide').value);
+      params.maxWind  = parseFloat(document.getElementById('sl-wind').value);
+      params.maxPrecip= parseFloat(document.getElementById('sl-precip').value);
+      toggleThresh();
+      fetchAll();
+    }
+
+    // Auto-fetch on load
+    fetchAll();
+  </script>
+</body>
+</html>
